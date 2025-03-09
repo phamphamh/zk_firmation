@@ -1,0 +1,3 @@
+# Ignorer les règles Cursor
+rules/
+*.mdc

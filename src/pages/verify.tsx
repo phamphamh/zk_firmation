@@ -1,354 +1,369 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
-import DocumentUploader from '@/components/DocumentUploader';
-import { MistralOCRService } from '@/services/ocr/mistralOCR';
-import { MinaZKPService } from '@/services/zkp/minaService';
-import { AIJudgeService } from '@/services/ai/aiJudgeService';
-import { CertificateService } from '@/services/pdf/certificateService';
-
-// Types pour le processus de vérification
-interface ProcessStep {
-  id: number;
-  name: string;
-  status: 'waiting' | 'processing' | 'completed' | 'error';
-  result?: any;
-  error?: string;
-}
+import { useRouter } from 'next/router';
+import { CheckCircle, FileDown, FileText, AlertCircle, XCircle, Eye, EyeOff } from 'lucide-react';
+import { Header } from '@/components/header';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { ApiService, VerificationRequest } from '@/services/api-service';
 
 export default function VerifyPage() {
-  // État pour le processus de vérification
-  const [steps, setSteps] = useState<ProcessStep[]>([
-    { id: 1, name: 'Soumettre un document', status: 'waiting' },
-    { id: 2, name: 'Extraction de texte', status: 'waiting' },
-    { id: 3, name: 'Vérification ZKP', status: 'waiting' },
-    { id: 4, name: 'Validation AI', status: 'waiting' },
-    { id: 5, name: 'Génération du certificat', status: 'waiting' }
-  ]);
-
-  // État pour le document soumis
-  const [document, setDocument] = useState<File | null>(null);
-
-  // État pour l'affirmation à vérifier
-  const [assertion, setAssertion] = useState<string>('');
-
-  // État pour le certificat généré
+  const router = useRouter();
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'invalid'>('loading');
+  const [currentStep, setCurrentStep] = useState('');
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
+  const [certificate, setCertificate] = useState<any>(null);
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [rawOcrText, setRawOcrText] = useState<string>("");
+  const [showRawOcr, setShowRawOcr] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fonction pour mettre à jour l'état d'une étape
-  const updateStepStatus = (stepId: number, status: ProcessStep['status'], result?: any, error?: string) => {
-    setSteps(prevSteps =>
-      prevSteps.map(step =>
-        step.id === stepId
-          ? { ...step, status, result, error }
-          : step
-      )
-    );
-  };
+  useEffect(() => {
+    // Récupérer les données de session
+    const storedFileData = sessionStorage.getItem('verificationFile');
+    const storedQuery = sessionStorage.getItem('verificationQuery');
+    const storedCustomData = sessionStorage.getItem('customData');
 
-  // Fonction pour gérer la soumission du document
-  const handleDocumentUpload = async (file: File) => {
+    if (!storedFileData || !storedQuery) {
+      router.replace('/');
+      return;
+    }
+
+    // Simuler la récupération du fichier (en réalité, nous ne pouvons pas récupérer le fichier de sessionStorage)
+    // Dans une application réelle, vous enverriez le fichier via un formulaire ou API
+    const mockFile = new File(["dummy content"], JSON.parse(storedFileData).name, {
+      type: JSON.parse(storedFileData).type,
+      lastModified: JSON.parse(storedFileData).lastModified
+    });
+
+    // Créer la requête avec les données personnalisées si disponibles
+    const request: VerificationRequest = {
+      document: mockFile,
+      query: storedQuery,
+      customData: storedCustomData ? JSON.parse(storedCustomData) : undefined
+    };
+
+    // Traiter le document
+    processDocument(request);
+  }, [router]);
+
+  const processDocument = async (request: VerificationRequest) => {
     try {
-      // Mettre à jour l'état du document
-      setDocument(file);
-      updateStepStatus(1, 'completed', { filename: file.name });
+      // Initialiser la progression
+      setProgress(5);
+      setStatus('loading');
+      setCurrentStep('Initialisation du processus');
 
-      // Passer à l'étape suivante (extraction de texte)
-      updateStepStatus(2, 'processing');
+      // Appeler le service de vérification
+      const result = await ApiService.verifyDocument(request, (currentProgress) => {
+        setProgress(currentProgress);
+        updateCurrentStep(currentProgress);
+      });
 
-      // Simuler l'extraction OCR (en prod, utilisez une véritable API)
-      setTimeout(() => {
-        // En réalité, vous utiliseriez quelque chose comme:
-        // const apiKey = process.env.NEXT_PUBLIC_MISTRAL_API_KEY || '';
-        // const ocrService = new MistralOCRService(apiKey);
-        // const result = await ocrService.extractText(file);
+      // Mise à jour de l'état après vérification
+      setCertificate(result.certificate);
+      setCertificateUrl(result.certificateUrl);
+      setExtractedData(result.extractedData);
 
-        // Simuler un résultat d'extraction
-        const simulatedResult = {
-          text: "Contrat de vente entre Partie A et Partie B. Le bien immobilier situé au 123 Rue Exemple est vendu pour la somme de 250 000 €. Date: 15/10/2023. Signatures: [Signature A] [Signature B]",
-          confidence: 0.92,
-          success: true
-        };
+      // Mettre à jour le texte OCR brut
+      if (result.rawOcrText) {
+        setRawOcrText(result.rawOcrText);
+      }
 
-        updateStepStatus(2, 'completed', simulatedResult);
+      if (result.success) {
+        setStatus('success');
+      } else {
+        setStatus('invalid');
+      }
 
-        // Passer à l'étape suivante (vérification ZKP)
-        processZKPVerification(simulatedResult.text);
-      }, 3000);
+      setProgress(100);
+
+      // Log les données pour le débogage
+      console.log("Données extraites:", result.extractedData);
+      console.log("Texte OCR brut:", result.rawOcrText);
     } catch (error) {
-      console.error('Erreur lors du téléchargement du document:', error);
-      updateStepStatus(1, 'error', null, error instanceof Error ? error.message : 'Erreur inconnue');
+      console.error('Erreur lors de la vérification:', error);
+      setError(error instanceof Error ? error.message : 'Une erreur inconnue est survenue');
+      setStatus('error');
     }
   };
 
-  // Fonction pour gérer la vérification ZKP
-  const processZKPVerification = (extractedText: string) => {
-    updateStepStatus(3, 'processing');
-
-    // Simuler la vérification ZKP
-    setTimeout(() => {
-      // En réalité, vous utiliseriez quelque chose comme:
-      // const zkpService = new MinaZKPService();
-      // const result = await zkpService.generateAssertionProof(extractedText, assertion);
-
-      // Simuler un résultat de vérification ZKP
-      const simulatedResult = {
-        success: true,
-        proof: {
-          publicInput: 'simulated-hash-value',
-          assertion: assertion || 'Le contrat est valide et signé par toutes les parties.',
-          type: 'mock-assertion-proof',
-          txId: 'mock-transaction-id-' + Date.now()
-        }
-      };
-
-      updateStepStatus(3, 'completed', simulatedResult);
-
-      // Passer à l'étape suivante (validation AI)
-      processAIValidation(extractedText, assertion || 'Le contrat est valide et signé par toutes les parties.');
-    }, 3000);
+  const updateCurrentStep = (progress: number) => {
+    if (progress < 30) {
+      setCurrentStep('Extraction du texte du document');
+    } else if (progress < 50) {
+      setCurrentStep('Analyse et extraction des informations');
+    } else if (progress < 80) {
+      setCurrentStep('Génération des preuves ZKP');
+    } else if (progress < 95) {
+      setCurrentStep('Création du certificat');
+    } else {
+      setCurrentStep('Vérification avec AI Judge');
+    }
   };
 
-  // Fonction pour gérer la validation AI
-  const processAIValidation = (extractedText: string, assertion: string) => {
-    updateStepStatus(4, 'processing');
-
-    // Simuler la validation AI
-    setTimeout(() => {
-      // En réalité, vous utiliseriez quelque chose comme:
-      // const apiKey = process.env.NEXT_PUBLIC_MISTRAL_API_KEY || '';
-      // const aiService = new AIJudgeService(apiKey);
-      // const result = await aiService.verifyAssertion(extractedText, assertion);
-
-      // Simuler un résultat de validation AI
-      const simulatedResult = {
-        assertion,
-        isValid: true,
-        confidence: 0.89,
-        explanation: "Le contrat contient bien toutes les signatures requises des parties A et B, ainsi que la date du 15/10/2023. Le prix de vente et l'adresse du bien sont clairement spécifiés."
-      };
-
-      updateStepStatus(4, 'completed', simulatedResult);
-
-      // Passer à l'étape finale (génération du certificat)
-      generateCertificate(extractedText, [simulatedResult], steps[2].result?.proof?.txId);
-    }, 3000);
+  const handleDownload = () => {
+    if (certificateUrl) {
+      // Créer un lien de téléchargement avec l'URL de l'objet blob
+      const downloadLink = document.createElement('a');
+      downloadLink.href = certificateUrl;
+      downloadLink.download = `zkp_certificate_${new Date().getTime()}.json`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
   };
 
-  // Fonction pour générer le certificat
-  const generateCertificate = (extractedText: string, assertions: any[], zkpProofId?: string) => {
-    updateStepStatus(5, 'processing');
-
-    // Simuler la génération du certificat
-    setTimeout(() => {
-      // En réalité, vous utiliseriez quelque chose comme:
-      // const certificateService = new CertificateService();
-      // const data = {
-      //   contractFilename: document?.name || 'document.pdf',
-      //   extractionDate: new Date(),
-      //   assertions,
-      //   zkpProofId,
-      //   aiJudgeName: 'Mistral AI Judge',
-      //   userSignature: 'Utilisateur'
-      // };
-      // const result = await certificateService.generateCertificate(data);
-
-      // Simuler un résultat de génération de certificat
-      const simulatedResult = {
-        success: true,
-        // Dans une application réelle, vous utiliseriez les bytes du PDF pour créer un URL
-        pdfUrl: '#' // URL du certificat généré
-      };
-
-      updateStepStatus(5, 'completed', simulatedResult);
-
-      // Définir l'URL du certificat (dans une application réelle, ce serait un Blob URL)
-      setCertificateUrl('#');
-    }, 3000);
+  const toggleRawOcr = () => {
+    setShowRawOcr(!showRawOcr);
   };
 
-  // Fonction pour rédemarrer le processus
-  const resetProcess = () => {
-    setDocument(null);
-    setAssertion('');
-    setCertificateUrl(null);
-    setSteps([
-      { id: 1, name: 'Soumettre un document', status: 'waiting' },
-      { id: 2, name: 'Extraction de texte', status: 'waiting' },
-      { id: 3, name: 'Vérification ZKP', status: 'waiting' },
-      { id: 4, name: 'Validation AI', status: 'waiting' },
-      { id: 5, name: 'Génération du certificat', status: 'waiting' }
-    ]);
-  };
+  // Section des données extraites pour réutilisation
+  const renderExtractedData = () => (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-medium text-slate-900">Données extraites par OCR</h2>
+        {rawOcrText && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleRawOcr}
+            className="flex items-center gap-1"
+          >
+            {showRawOcr ? <EyeOff size={16} /> : <Eye size={16} />}
+            {showRawOcr ? "Masquer texte brut" : "Afficher texte brut"}
+          </Button>
+        )}
+      </div>
+
+      {rawOcrText && showRawOcr && (
+        <div className="bg-slate-100 p-4 rounded-lg border border-slate-200 mb-6 overflow-x-auto">
+          <h3 className="text-md font-medium text-slate-900 mb-2">Texte OCR brut</h3>
+          <pre className="text-xs font-mono whitespace-pre-wrap text-slate-700">
+            {rawOcrText}
+          </pre>
+        </div>
+      )}
+
+      {extractedData && (
+        <div className="bg-slate-100 p-4 rounded-lg border border-slate-200 overflow-x-auto">
+          <h3 className="text-md font-medium text-slate-900 mb-2">Données structurées</h3>
+          <pre className="text-xs font-mono whitespace-pre-wrap text-slate-700">
+            {JSON.stringify(extractedData, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
       <Head>
-        <title>Vérification de Document | ZK-Firmation</title>
-        <meta name="description" content="Vérifiez l'authenticité de vos documents juridiques" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
+        <title>
+          {status === 'loading' ? 'Vérification en cours...' :
+           status === 'success' ? 'Vérification réussie' :
+           status === 'invalid' ? 'Information non vérifiée' : 'Erreur de vérification'} | ZK Firmation
+        </title>
       </Head>
 
-      <div className="min-h-screen flex flex-col">
-        <header className="bg-primary-700 text-white p-4">
-          <div className="container mx-auto">
-            <h1 className="text-2xl font-bold">ZK-Firmation</h1>
-            <p className="text-sm">Vérification juridique sécurisée et confidentielle</p>
-          </div>
-        </header>
+      <div className="flex flex-col min-h-screen bg-slate-50">
+        <Header />
 
-        <main className="flex-grow container mx-auto p-4">
-          <h2 className="text-3xl font-bold mb-6">Vérification de Document</h2>
+        <main className="flex-1 py-12">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6">
+            {status === 'loading' && (
+              <div className="text-center">
+                <h1 className="text-2xl font-bold text-slate-900 mb-4">
+                  Traitement du document en cours...
+                </h1>
 
-          <div className="mb-8 bg-white shadow-md rounded-lg p-6">
-            <div className="flex items-center mb-6">
-              {steps.map((step) => (
-                <div key={step.id} className="flex flex-col items-center flex-1">
-                  <div
-                    className={`h-10 w-10 rounded-full flex items-center justify-center
-                              ${step.status === 'waiting' ? 'bg-gray-200' :
-                                step.status === 'processing' ? 'bg-blue-500 text-white' :
-                                step.status === 'completed' ? 'bg-green-500 text-white' :
-                                'bg-red-500 text-white'}`}
-                  >
-                    {step.status === 'processing' ? (
-                      <div className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></div>
-                    ) : (
-                      step.id
-                    )}
-                  </div>
-                  <p className="text-sm mt-2 text-center">{step.name}</p>
-                </div>
-              ))}
-            </div>
-
-            {steps[0].status === 'waiting' && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Soumettre un Document</h3>
-                <DocumentUploader onUpload={handleDocumentUpload} />
-              </div>
-            )}
-
-            {steps[0].status === 'completed' && steps[1].status === 'waiting' && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Document Soumis</h3>
-                <p>Votre document <strong>{document?.name}</strong> a été soumis avec succès.</p>
-                <p className="mt-4">Nous allons maintenant procéder à l'extraction du texte...</p>
-              </div>
-            )}
-
-            {steps[1].status === 'completed' && steps[2].status === 'waiting' && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Extraction de Texte Complétée</h3>
-                <p className="mb-4">Le texte a été extrait avec une confiance de <strong>{Math.round((steps[1].result?.confidence || 0) * 100)}%</strong>.</p>
-
-                <div className="mb-4">
-                  <label htmlFor="assertion" className="block text-sm font-medium text-gray-700 mb-1">
-                    Affirmation à vérifier:
-                  </label>
-                  <input
-                    type="text"
-                    id="assertion"
-                    value={assertion}
-                    onChange={(e) => setAssertion(e.target.value)}
-                    placeholder="Ex: Le contrat est valide et signé par toutes les parties"
-                    className="w-full p-2 border border-gray-300 rounded-md"
-                  />
+                <div className="my-8">
+                  <Progress value={progress} className="h-3" />
+                  <p className="mt-2 text-slate-600">{progress}% - {currentStep}</p>
                 </div>
 
-                <button
-                  onClick={() => processZKPVerification(steps[1].result?.text || '')}
-                  className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
-                >
-                  Poursuivre avec la Vérification ZKP
-                </button>
-              </div>
-            )}
-
-            {steps[2].status === 'completed' && steps[3].status === 'waiting' && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Vérification ZKP Complétée</h3>
-                <p>La preuve ZKP a été générée avec succès.</p>
-                <p className="mt-2">ID de transaction: <code>{steps[2].result?.proof?.txId}</code></p>
-                <p className="mt-4">Nous allons maintenant procéder à la validation par l'IA...</p>
-              </div>
-            )}
-
-            {steps[3].status === 'completed' && steps[4].status === 'waiting' && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Validation AI Complétée</h3>
-                <p className="mb-2">Résultat:</p>
-                <div className={`p-3 rounded-lg ${steps[3].result?.isValid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  <p className="font-bold">
-                    {steps[3].result?.isValid ? 'VALIDE' : 'NON VALIDE'}
-                    (Confiance: {Math.round((steps[3].result?.confidence || 0) * 100)}%)
-                  </p>
-                  <p className="mt-2">{steps[3].result?.explanation}</p>
-                </div>
-                <button
-                  onClick={() => generateCertificate(
-                    steps[1].result?.text || '',
-                    [steps[3].result],
-                    steps[2].result?.proof?.txId
-                  )}
-                  className="mt-4 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
-                >
-                  Générer le Certificat
-                </button>
-              </div>
-            )}
-
-            {steps[4].status === 'completed' && (
-              <div className="mb-6">
-                <h3 className="text-xl font-semibold mb-4">Certificat Généré</h3>
-                <p className="mb-4">Votre certificat de vérification a été généré avec succès.</p>
-                <div className="flex justify-center">
-                  <a
-                    href={certificateUrl || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-primary-600 text-white px-6 py-3 rounded-md hover:bg-primary-700 transition-colors flex items-center"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clipRule="evenodd" />
-                    </svg>
-                    Télécharger le Certificat
-                  </a>
-                </div>
-                <div className="text-center mt-6">
-                  <button
-                    onClick={resetProcess}
-                    className="text-primary-600 underline"
-                  >
-                    Vérifier un autre document
-                  </button>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-blue-800 max-w-md mx-auto">
+                  <p>Nous analysons votre document et générons des preuves ZKP. Cela peut prendre quelques instants.</p>
                 </div>
               </div>
             )}
 
-            {/* Affichage des erreurs */}
-            {steps.some(step => step.status === 'error') && (
-              <div className="mt-6 p-4 bg-red-100 text-red-800 rounded-lg">
-                <h3 className="font-bold mb-2">Une erreur est survenue</h3>
-                <p>
-                  {steps.find(step => step.status === 'error')?.error ||
-                    'Une erreur inattendue est survenue lors du processus de vérification.'}
+            {/* Section des données extraites - visible à toutes les étapes sauf loading */}
+            {status !== 'loading' && extractedData && renderExtractedData()}
+
+            {status === 'success' && certificate && (
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center bg-green-100 text-green-600 rounded-full p-4 mb-4">
+                  <CheckCircle size={48} />
+                </div>
+
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                  Vérification réussie !
+                </h1>
+
+                <p className="text-lg text-slate-600 mb-8">
+                  Votre document a été vérifié avec succès. Voici votre certificat de preuve.
                 </p>
-                <button
-                  onClick={resetProcess}
-                  className="mt-4 text-red-800 underline"
+
+                <div className="bg-white border rounded-xl shadow-sm p-6 mb-8 text-left">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold mb-2">{certificate.title}</h2>
+                    <p className="text-sm text-slate-500">Généré le {certificate.date}</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Document d'origine</h3>
+                      <p className="text-slate-900">{certificate.originalDocument.name}</p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Requête</h3>
+                      <p className="text-slate-900">{certificate.query}</p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Affirmation vérifiée</h3>
+                      <p className="text-slate-900">{certificate.validatedAffirmation.statement}</p>
+                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-800">
+                        <p className="text-sm flex items-center">
+                          <CheckCircle size={16} className="mr-2" />
+                          {certificate.validatedAffirmation.verification}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Hash de preuve ZKP</h3>
+                      <p className="text-xs font-mono bg-slate-50 p-2 rounded border overflow-x-auto">
+                        {certificate.validatedAffirmation.zkProofHash}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Méthode de vérification</h3>
+                      <p className="text-slate-900">{certificate.verificationMethod}</p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Validité</h3>
+                      <p className="text-slate-900">
+                        Valide jusqu'au {new Date(certificate.validUntil).toLocaleDateString('fr-FR')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-center gap-4">
+                  <Button
+                    onClick={handleDownload}
+                    className="flex items-center gap-2"
+                  >
+                    <FileDown size={18} />
+                    Télécharger le certificat
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push('/')}
+                  >
+                    Nouvelle vérification
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {status === 'invalid' && certificate && (
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center bg-red-100 text-red-600 rounded-full p-4 mb-4">
+                  <XCircle size={48} />
+                </div>
+
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                  Information non vérifiée
+                </h1>
+
+                <p className="text-lg text-slate-600 mb-8">
+                  L'information que vous souhaitez prouver ne correspond pas aux données extraites du document.
+                </p>
+
+                <div className="bg-white border rounded-xl shadow-sm p-6 mb-8 text-left">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold mb-2">{certificate.title}</h2>
+                    <p className="text-sm text-slate-500">Généré le {certificate.date}</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Document d'origine</h3>
+                      <p className="text-slate-900">{certificate.originalDocument.name}</p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Requête</h3>
+                      <p className="text-slate-900">{certificate.query}</p>
+                      <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-800">
+                        <p className="text-sm flex items-center">
+                          <XCircle size={16} className="mr-2" />
+                          {certificate.validatedAffirmation.verification}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-500">Résultat de la vérification</h3>
+                      <p className="text-red-600 font-medium">La vérification a échoué</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-center gap-4">
+                  <Button
+                    onClick={handleDownload}
+                    className="flex items-center gap-2"
+                    variant="outline"
+                  >
+                    <FileDown size={18} />
+                    Télécharger le rapport
+                  </Button>
+
+                  <Button
+                    onClick={() => router.push('/')}
+                  >
+                    Nouvelle vérification
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {status === 'error' && (
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center bg-red-100 text-red-600 rounded-full p-4 mb-4">
+                  <AlertCircle size={48} />
+                </div>
+
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                  Une erreur est survenue
+                </h1>
+
+                <p className="text-lg text-slate-600 mb-8">
+                  {error || "Nous n'avons pas pu traiter votre document. Veuillez réessayer."}
+                </p>
+
+                <Button
+                  onClick={() => router.push('/')}
+                  variant="outline"
                 >
-                  Recommencer
-                </button>
+                  Retour à l'accueil
+                </Button>
               </div>
             )}
           </div>
         </main>
 
-        <footer className="bg-gray-800 text-white p-4">
-          <div className="container mx-auto text-center">
-            <p>&copy; {new Date().getFullYear()} ZK-Firmation. Tous droits réservés.</p>
-          </div>
+        <footer className="py-6 text-center text-sm text-slate-500">
+          <p>© {new Date().getFullYear()} ZK Firmation. Tous droits réservés.</p>
         </footer>
       </div>
     </>

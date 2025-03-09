@@ -3,29 +3,24 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { createWorker } from 'tesseract.js';
-import pdfParse from 'pdf-parse';
+import { convertPdfToImages, cleanupImages } from './pdf-converter.js';
 
-// Obtenir le répertoire actuel
+// Get current directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Convertit une image en texte via OCR
- * @param {string} imagePath - Chemin de l'image à traiter
- * @param {string} language - Langue du document (fra, eng, etc.)
- * @returns {Promise<string>} - Texte extrait
+ * Converts an image to text using OCR
+ * @param {string} imagePath - Path to the image
+ * @param {string} language - Document language (fra, eng, etc.)
+ * @returns {Promise<string>} - Extracted text
  */
 export async function extractTextFromImage(imagePath, language = 'fra+eng') {
   console.log(`🔍 Extraction du texte de l'image: ${imagePath}`);
 
   try {
-    // Créer un worker Tesseract
     const worker = await createWorker(language);
-
-    // Reconnaître le texte
     const { data: { text } } = await worker.recognize(imagePath);
-
-    // Terminer le worker
     await worker.terminate();
 
     console.log('✅ Extraction OCR réussie');
@@ -37,69 +32,72 @@ export async function extractTextFromImage(imagePath, language = 'fra+eng') {
 }
 
 /**
- * Convertit un PDF en texte
- * @param {string} pdfPath - Chemin du PDF à traiter
- * @returns {Promise<string>} - Texte extrait
+ * Extracts text from a PDF by converting it to images and applying OCR
+ * @param {string} pdfPath - Path to the PDF
+ * @param {string} language - Document language (fra, eng, etc.)
+ * @returns {Promise<string>} - Extracted text
  */
-export async function extractTextFromPDF(pdfPath) {
+export async function extractTextFromPDF(pdfPath, language = 'fra+eng') {
   console.log(`🔍 Extraction du texte du PDF: ${pdfPath}`);
 
   try {
-    // Lire le fichier PDF
-    const dataBuffer = fs.readFileSync(pdfPath);
-
-    try {
-      // Parser le PDF
-      const data = await import('pdf-parse')
-        .then(module => module.default(dataBuffer))
-        .catch(err => {
-          console.error(`❌ Erreur lors du parsing du PDF: ${err.message}`);
-          throw new Error('PDF non parsable');
-        });
-
-      console.log('✅ Extraction PDF réussie');
-      return data.text;
-    } catch (parseError) {
-      console.error(`❌ Erreur lors du parsing du PDF, utilisation d'OCR: ${parseError.message}`);
-      return await performOCROnPDF(pdfPath, 'fra+eng');
+    const tempDir = path.resolve(process.cwd(), 'temp_images');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
     }
+
+    const imagePaths = await convertPdfToImages(pdfPath, tempDir);
+
+    if (imagePaths.length === 0) {
+      console.warn('Aucune image générée à partir du PDF, tentative de lecture directe du contenu');
+      try {
+        const pdfContent = fs.readFileSync(pdfPath, 'utf-8');
+        return `CONTENU BRUT DU PDF:\n\n${pdfContent}`;
+      } catch (readError) {
+        throw new Error('Impossible de traiter le PDF - conversion en image et lecture directe ont échoué');
+      }
+    }
+
+    const textPromises = imagePaths.map(imgPath => extractTextFromImage(imgPath, language));
+    const textResults = await Promise.all(textPromises);
+    const fullText = textResults.join('\n\n');
+
+    cleanupImages(imagePaths);
+
+    console.log('✅ Extraction du texte PDF réussie');
+    return fullText;
   } catch (error) {
     console.error(`❌ Erreur lors de l'extraction du PDF: ${error.message}`);
-    throw error;
+
+    try {
+      console.log('Tentative de lecture directe du PDF comme texte');
+      const pdfContent = fs.readFileSync(pdfPath, 'utf-8');
+      return `ÉCHEC OCR - CONTENU BRUT DU PDF:\n\n${pdfContent}`;
+    } catch (readError) {
+      throw error;
+    }
   }
 }
 
 /**
- * Extrait le texte d'un document (PDF, image)
- * @param {string} documentPath - Chemin du document
- * @param {string} language - Langue du document pour OCR
- * @returns {Promise<string>} - Texte extrait
+ * Extracts text from a document (PDF, image, or text file)
+ * @param {string} documentPath - Path to the document
+ * @param {string} language - Document language for OCR
+ * @returns {Promise<string>} - Extracted text
  */
 export async function extractTextFromDocument(documentPath, language = 'fra+eng') {
   console.log(`📄 Extraction du texte depuis: ${documentPath}`);
 
-  // Déterminer le type de fichier
   const extension = path.extname(documentPath).toLowerCase();
 
   try {
     if (extension === '.pdf') {
-      // Essayer d'abord l'extraction standard du PDF
-      try {
-        const pdfText = await extractTextFromPDF(documentPath);
-
-        // Si le texte extrait est trop court ou vide, le PDF est probablement scanné
-        if (pdfText.trim().length < 100) {
-          console.log('⚠️ PDF avec peu de texte, application d\'OCR...');
-          return await performOCROnPDF(documentPath, language);
-        }
-
-        return pdfText;
-      } catch (error) {
-        console.log('⚠️ Échec de l\'extraction de texte standard, application d\'OCR...');
-        return await performOCROnPDF(documentPath, language);
-      }
+      return await extractTextFromPDF(documentPath, language);
     } else if (['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif'].includes(extension)) {
       return await extractTextFromImage(documentPath, language);
+    } else if (['.txt', '.text', '.md', '.html', '.htm', '.xml'].includes(extension)) {
+      const content = fs.readFileSync(documentPath, 'utf-8');
+      return content;
     } else {
       throw new Error(`Format de fichier non supporté: ${extension}`);
     }
@@ -110,39 +108,10 @@ export async function extractTextFromDocument(documentPath, language = 'fra+eng'
 }
 
 /**
- * Effectue l'OCR sur un PDF
- * @param {string} pdfPath - Chemin du PDF
- * @param {string} language - Langue du document
- * @returns {Promise<string>} - Texte extrait par OCR
- */
-async function performOCROnPDF(pdfPath, language) {
-  console.log('⚠️ Tentative d\'OCR direct sur le PDF avec Tesseract...');
-
-  try {
-    // Utiliser Tesseract directement sur le PDF
-    // C'est une approche simplifiée pour le développement, qui peut fonctionner dans certains cas simples
-    const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker(language);
-
-    // Reconnaître le texte directement du PDF
-    const { data: { text } } = await worker.recognize(pdfPath);
-
-    // Terminer le worker
-    await worker.terminate();
-
-    console.log('✅ OCR direct sur PDF réussi');
-    return text;
-  } catch (error) {
-    console.error(`❌ Erreur lors de l'OCR du PDF: ${error.message}`);
-    return `Texte simulé pour ${pdfPath}. OCR a échoué.`;
-  }
-}
-
-/**
- * Sauvegarde le texte extrait dans un fichier
- * @param {string} text - Texte à sauvegarder
- * @param {string} documentPath - Chemin du document original
- * @returns {string} - Chemin du fichier sauvegardé
+ * Saves extracted text to a file
+ * @param {string} text - Text to save
+ * @param {string} documentPath - Path to the original document
+ * @returns {string} - Path to the saved file
  */
 export function saveExtractedText(text, documentPath) {
   const baseName = path.basename(documentPath, path.extname(documentPath));
@@ -155,10 +124,10 @@ export function saveExtractedText(text, documentPath) {
 }
 
 /**
- * Fonction principale pour l'extraction de texte
- * @param {string} documentPath - Chemin du document
- * @param {string} language - Langue du document
- * @returns {Promise<{text: string, outputPath: string}>} - Texte extrait et chemin de sauvegarde
+ * Main function for text extraction and saving
+ * @param {string} documentPath - Path to the document
+ * @param {string} language - Document language
+ * @returns {Promise<{text: string, outputPath: string}>} - Extracted text and save path
  */
 export async function extractAndSaveText(documentPath, language = 'fra+eng') {
   try {

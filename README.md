@@ -1,142 +1,90 @@
 # ZK-Firmation
 
-An advanced legal verification system using Zero Knowledge Proofs (ZKP) and Mina Protocol.
+A secure document verification system using Zero Knowledge Proofs (ZKP) to validate document information without exposing sensitive data.
 
 ## Overview
 
-ZK-Firmation cryptographically verifies information in legal documents without revealing sensitive data. The system combines:
-
-- **OCR Extraction** to read text from documents
-- **Intelligent NLP** to extract specific information
-- **Zero Knowledge Proofs (ZKP)** to cryptographically verify without revealing data
-- **Revocation System** based on MerkleMap to invalidate documents
-- **Verification History** to track all performed verifications
-
-## Features
-
-- **Universal Document Compatibility**: Process attestations, certificates, contracts, invoices, etc.
-- **Advanced Zero Knowledge Proofs**: Age verification without revealing birth dates, date verification, value verification, etc.
-- **Query-Based System**: Accept any document and any query
-- **Verifiable Certificates**: Generate verification certificates with proofs recorded on the blockchain
-- **MerkleMap for Revocation**: Enable document or information revocation
-- **Verification History**: Track the history of all verifications performed
-
-## Available ZKP Proofs
-
-The system can generate several types of ZKP proofs:
-
-1. **Document Validity Proofs**: Verify that a document is valid, signed and not revoked
-2. **Date Proofs**: Verify a date in a document (expiration, signature, etc.)
-3. **Age Proofs**: Verify that a person is of legal age or within an age range without revealing their date of birth
-4. **Value Proofs**: Verify that a specific value is present in a document
-
-## Technical Highlights
-
-- **Advanced Age Verification**: Prove age is between specified bounds without revealing exact birth date
-- **Date Arithmetics**: Perform arithmetic operations on dates to prove temporal relationships
-- **Revocation System**: Using MerkleMap for efficient cryptographic revocation
-- **Verification History**: Store verification history in a verifiable data structure
-- **NLP Extraction**: Extract information from documents using regex patterns and AI assistance
-
-## Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/phamphamh/zk_firmation.git
-cd zk_firmation
-
-# Install dependencies
-npm install
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your API keys
-```
-
-## Configuration
-
-```
-# .env file
-MISTRAL_API_KEY=your-api-key  # Optional, for AI-powered extraction
-```
-
-## Usage
-
-### Universal Verification
-
-```bash
-# Verify information in a document
-npm run zkp:universel <document_path> "<query>"
-
-# Examples:
-npm run zkp:universel document.pdf "birth date"
-npm run zkp:universel attestation.pdf "Is the document valid?"
-npm run zkp:universel certificate.pdf "Is the person of legal age?"
-npm run zkp:universel contract.pdf "What is the expiration date?"
-```
-
-### Sample Queries:
-
-- "What is the birth date?"
-- "Is the document valid and signed?"
-- "Is the person of legal age?"
-- "What is the signer's address?"
-- "What is the expiration date?"
-- "Was the contract signed after 01/01/2022?"
-- "Is the holder's age between 18 and 25 years?"
+ZK-Firmation allows users to:
+1. Submit a document for verification
+2. Extract key information through OCR
+3. Verify claims about the document without revealing the entire content
+4. Generate a cryptographic certificate attesting to the verification
 
 ## Project Structure
 
-- `scripts/utils/document-extractor.js`: OCR extraction module with Tesseract
-- `scripts/utils/info-extractor.js`: Information extraction module with NLP
-- `scripts/utils/zkp-generic.js`: Generic ZKP module for all types of proofs
-- `scripts/zkp-universelle.js`: Main script that integrates all components
-- `scripts/zkp-test.js`: Simplified test script for quick testing
+The application is organized into several key components:
 
-## Advanced Usage Examples
+### Document Processing
+- `src/services/document-service.ts`: Extracts text from documents (PDF, images, text files)
 
-### Revocation System
+### Client-Side Services
+- `src/services/document-service.ts`: Client-side service for document handling
+- `src/services/api-service.ts`: Main service for document verification flow
+- `src/services/mock-document-service.ts`: Mock data service for testing
 
-```javascript
-// Revoke a document
-const zkpManager = new ZkpManager();
-const documentHash = Field("123456789");
-zkpManager.revocationSystem.revoke(documentHash);
+### API Routes
+- `src/pages/api/extract-text.ts`: API endpoint for text extraction
+- `src/pages/api/extract-info.ts`: API endpoint for specific information extraction
 
-// Check if a document is revoked
-const isRevoked = zkpManager.revocationSystem.isRevoked(documentHash);
+### UI Pages
+- `src/pages/index.tsx`: Landing page
+- `src/pages/verify.tsx`: Main verification page
+- `src/pages/mock-verify.tsx`: Test page with mock documents
+
+## Verification Process
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Upload    │     │    Text     │     │  Extract    │     │   Verify    │
+│  Document   │────►│ Extraction  │────►│ Information │────►│  & Generate │
+│             │     │   (OCR)     │     │             │     │ Certificate │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-### Verification History
+1. **Document Upload**
+   - User uploads a document and specifies a claim to verify
+   - Document is sent to the server for processing
 
-```javascript
-// Get verification history for a document
-const zkpManager = new ZkpManager();
-const documentHash = Field("123456789");
-const history = zkpManager.verificationHistory.getForDocument(documentHash);
-```
+2. **Text Extraction**
+   - Server extracts text from the document using OCR
+   - For PDFs, they are converted to images first then processed
+   - Fallback mechanisms handle different document types
 
-### Age Range Proofs
+3. **Information Extraction**
+   - Specific information is extracted based on the user's query
+   - Uses regex patterns or AI (via Mistral API) to extract relevant details
 
-```javascript
-// Prove a person is between 18 and 25 years old without revealing their birth date
-const zkpManager = new ZkpManager();
-const dobStr = "01/01/2000";
-const proofResult = await zkpManager.proveAgeRange(dobStr, 18, 25, documentInfo, "Verify eligibility");
-```
+4. **Verification & Certification**
+   - The extracted information is verified against the user's claim
+   - A certificate is generated with the verification result
+   - Optionally, a Zero Knowledge Proof can be generated to prove the verification without revealing document contents
 
-## Technologies Used
+## Getting Started
 
-- **o1js**: ZKP library for Mina Protocol
-- **Tesseract.js**: OCR for text extraction
-- **pdf-parse**: PDF text extraction
-- **MerkleMap**: Data structure for efficient revocation
-- **Mistral AI API** (optional): For more accurate information extraction
+1. Install dependencies:
+   ```
+   npm install
+   ```
 
-## Contributing
+2. Run the development server:
+   ```
+   npm run dev
+   ```
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+3. Open [http://localhost:3000](http://localhost:3000) to see the application
 
-## License
+## Testing
 
-MIT
+The application includes a mock verification page at `/mock-verify` that allows testing the verification process with pre-loaded documents:
+- Invoice (payment verification)
+- Rental contract (contract validity)
+- ID card (identity verification)
+
+## Technologies
+
+- Next.js
+- TypeScript
+- Tesseract.js (OCR)
+- Mistral AI (information extraction)
+- Mina Protocol (Zero Knowledge Proofs)
+- TailwindCSS (UI)
