@@ -1,0 +1,103 @@
+---
+description: l'objectif est de donner les guidelines du projet, et les grandes lignes à respecter
+globs: 
+alwaysApply: true
+---
+Objectif du projet
+L'objectif du projet est de créer un système de vérification juridique automatisé qui permet à un utilisateur de soumettre un contrat, d'extraire des informations clés à partir de celui-ci, de vérifier la validité des informations sans exposer les données sensibles, et de générer un certificat signé qui atteste de l'authenticité du contrat. Le système utilise des technologies de Zero Knowledge Proof (ZKP) avec Mina Protocol pour garantir la confidentialité, ainsi qu'une Instance Intelligente de Vérification (AI Judge) pour valider les affirmations juridiques relatives au contrat. Le processus complet doit être sécurisé et garantir l'intégrité des données.
+
+Voici un aperçu des étapes du projet, des tests à effectuer à chaque étape, des outils/documentation nécessaires, et des valeurs de retour à chaque étape.
+
+Étape 1 : Préparation et Configuration de Mistral OCR Localement
+Utilité :
+Extraire le texte d'un contrat ou document scanné sans révéler le contenu sensible, pour ensuite formuler une affirmation qui sera vérifiée.
+
+Étapes :
+Installer Mistral OCR localement et s'assurer qu'il est configuré pour recevoir des images de contrats (scannées ou sous forme de photos).
+Utiliser l'API de Mistral OCR pour extraire le texte des documents soumis.
+Les informations extraites doivent inclure des éléments comme les signatures, tampons, dates, et parties signataires.
+Tests à effectuer :
+Testez l'extraction de texte avec plusieurs types de documents (manuscrits, imprimés, et différents formats d'images).
+Vérifiez que le texte extrait est précis et que les éléments juridiques comme les signatures et tampons sont correctement capturés.
+Documentation nécessaire :
+https://docs.mistral.ai/capabilities/document/
+Utilisez les API de Mistral OCR pour extraire le texte de documents et pour analyser la précision de l'extraction.
+Valeur de retour attendue :
+Texte extrait du contrat avec un score de confiance sur la précision de l'extraction.
+Retourner un statut de succès ou d’échec en cas d'extraction incorrecte.
+Étape 2 : Vérification via Zero Knowledge Proof (ZKP) avec Mina
+Utilité :
+Générer un Zero Knowledge Proof (ZKP) pour prouver que l'affirmation sur un contrat (par exemple "le contrat est valide") est vraie sans révéler le contenu du contrat.
+
+Étapes :
+Utiliser le texte extrait par Mistral OCR pour formuler l'affirmation à vérifier, par exemple "le contrat est toujours valide".
+Intégrer la bibliothèque o1js pour générer une preuve ZKP avec Mina Protocol.
+Cette preuve prouvera l'affirmation sans révéler les données sensibles.
+Créer un processus de soumission de la preuve sur la blockchain Mina, en utilisant la librairie o1js pour créer et envoyer la preuve.
+Tests à effectuer :
+Tester la génération de la preuve ZKP à partir de l'affirmation formulée.
+Tester l'envoi de la preuve vers la blockchain Mina et vérifier la confirmation de la preuve sur la blockchain.
+Tester la validation de la preuve à partir du backend Mina.
+Documentation nécessaire :
+o1js - Documentation
+https://docs.minaprotocol.com/zkapps/o1js
+Valeur de retour attendue :
+La preuve ZKP générée (format JSON ou autre).
+Statut de succès de l'envoi de la preuve sur la blockchain Mina.
+Étape 3 : Vérification par l'Instance Intelligente de Vérification (AI Judge)
+Utilité :
+Valider l'affirmation à partir de l'extraction OCR du contrat, en vérifiant les signatures, tampons et autres éléments juridiques clés.
+
+Étapes :
+Une fois la preuve générée, soumettre l'extraction de texte à l'Instance Intelligente de Vérification (un AI Judge).
+L'AI Judge doit analyser l'extraction pour vérifier les informations telles que les signatures, les tampons et la validité de l'affirmation.
+L'AI Judge va renvoyer un statut de validation, indiquant si l'affirmation est correcte ou non.
+Tests à effectuer :
+Tester le processus de validation avec des contrats variés pour s'assurer que l'AI Judge est capable de détecter des signatures et tampons légitimes.
+Vérifier la cohérence de l'affirmation avec les informations extraites du contrat.
+Documentation nécessaire :
+Documentation sur l'AI Judge (si disponible, inclure les spécifications et les critères de validation).
+Valeur de retour attendue :
+Statut de validation de l'affirmation (exemple : "affirmation valide" ou "affirmation invalide").
+Étape 4 : Génération et Signature du Certificat PDF
+Utilité :
+Générer un certificat officiel contenant l'affirmation validée, la preuve ZKP et la signature de toutes les parties impliquées (créateur du système, AI Judge et utilisateur).
+
+Étapes :
+Créer un certificat PDF contenant les informations suivantes :
+Affirmation validée par l'AI Judge.
+Détails sur la validation via Mina ZKP.
+Signature numérique de l'utilisateur et du créateur du système (pour garantir l'intégrité du processus).
+Signature de l'AI Judge (Instance Intelligente de Vérification).
+Le certificat PDF doit être signé électroniquement pour garantir son authenticité.
+Tests à effectuer :
+Vérifier que le certificat PDF contient toutes les informations correctes (affirmation, preuves, signatures).
+Tester le processus de signature numérique pour garantir que les signatures sont bien intégrées et sécurisées.
+S'assurer que le certificat est bien lisible sur différents appareils.
+Documentation nécessaire :
+Documentation sur la signature numérique et la génération de PDF en TypeScript (exemple : PDF-lib).
+Valeur de retour attendue :
+Certificat PDF signé, prêt à être envoyé à l'utilisateur.
+Étape 5 : Finalisation et Interface Utilisateur
+Utilité :
+Fournir une interface permettant à l'utilisateur de soumettre un contrat, suivre le processus de vérification et recevoir un certificat valide.
+
+Étapes :
+Créer une interface frontend pour permettre à l'utilisateur de soumettre un contrat en PDF ou image, ainsi qu'une affirmation à vérifier.
+Intégrer un système de suivi du processus de vérification avec des retours d'état à chaque étape.
+Générer le certificat PDF final et permettre à l'utilisateur de le télécharger.
+Tests à effectuer :
+Tester l'interface pour s'assurer qu'elle est intuitive et facile à utiliser.
+Vérifier que le processus est fluide et que l'utilisateur reçoit le certificat une fois la vérification terminée.
+Documentation nécessaire :
+Documentation sur les meilleures pratiques d'interface utilisateur et l'intégration avec TypeScript.
+Valeur de retour attendue :
+Interface prête à l'emploi pour l'utilisateur avec des étapes de processus claires.
+Certificat généré et téléchargeable.
+Critères de Test et Validation :
+Tests d'intégration : Assurez-vous que chaque étape fonctionne de manière fluide et que les sorties sont compatibles entre chaque module.
+Tests de sécurité : Vérifiez que les informations personnelles ou sensibles sont protégées à chaque étape du processus.
+Tests de performance : Assurez-vous que l'ensemble du système fonctionne rapidement, même avec de grands volumes de données ou des documents volumineux.
+Autotests
+ faire des tests qui quittent le programme peut importe la reponse pour pas avoir de boucle infinie, et demande de la doc si nécessaire
+Chaque étape doit être équipée de tests unitaires automatisés pour vérifier son bon fonctionnement sans intervention manuelle. Le système doit également offrir un ensemble de tests d'intégration pour valider l'interopérabilité des composants entre eux.
