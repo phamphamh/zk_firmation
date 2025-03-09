@@ -284,9 +284,21 @@ export class ApiService {
       extractionResults.forEach((result, index) => {
         if (result && result.found && result.value) {
           const key = `extraction_${index + 1}`;
+
+          // Traitement pour s'assurer que les valeurs complexes sont correctement gérées
+          let value = result.value;
+          if (typeof value === 'object' && value !== null) {
+            // Si la valeur est un objet, convertissons ses propriétés en chaînes
+            if (value.original !== undefined || value.normalized !== undefined) {
+              value = `${value.original || ''} (${value.normalized || ''})`.trim();
+            } else {
+              value = JSON.stringify(value);
+            }
+          }
+
           data[key] = {
             query: subQueries[index],
-            value: result.value,
+            value: value,
             confidence: result.confidence,
             context: result.context
           };

@@ -141,7 +141,7 @@ export default function VerifyPage() {
         <div className="bg-slate-100 p-4 rounded-lg border border-slate-200 mb-6 overflow-x-auto">
           <h3 className="text-md font-medium text-slate-900 mb-2">Texte OCR brut</h3>
           <pre className="text-xs font-mono whitespace-pre-wrap text-slate-700">
-            {rawOcrText}
+            {typeof rawOcrText === 'string' ? rawOcrText : JSON.stringify(rawOcrText, null, 2)}
           </pre>
         </div>
       )}
@@ -207,49 +207,55 @@ export default function VerifyPage() {
                 </p>
 
                 <div className="bg-white border rounded-xl shadow-sm p-6 mb-8 text-left">
-                  <div className="mb-4">
-                    <h2 className="text-xl font-semibold mb-2">{certificate.title}</h2>
-                    <p className="text-sm text-slate-500">Généré le {certificate.date}</p>
+                  <div className="mb-8">
+                    <h2 className="text-xl font-semibold mb-2">{certificate?.title || 'Certificat de vérification'}</h2>
+                    <p className="text-sm text-slate-500">Généré le {certificate?.date || new Date().toLocaleDateString('fr-FR')}</p>
                   </div>
 
                   <div className="space-y-4">
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Document d'origine</h3>
-                      <p className="text-slate-900">{certificate.originalDocument.name}</p>
+                      <p className="text-slate-900">{certificate?.originalDocument?.name || 'Non disponible'}</p>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Requête</h3>
-                      <p className="text-slate-900">{certificate.query}</p>
+                      <p className="text-slate-900">
+                        {typeof certificate?.query === 'object' && certificate?.query?.original
+                          ? certificate.query.original
+                          : (typeof certificate?.query === 'string'
+                              ? certificate.query
+                              : 'Non disponible')}
+                      </p>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Affirmation vérifiée</h3>
-                      <p className="text-slate-900">{certificate.validatedAffirmation.statement}</p>
+                      <p className="text-slate-900">{certificate?.validatedAffirmation?.statement || 'Non disponible'}</p>
                       <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-green-800">
                         <p className="text-sm flex items-center">
                           <CheckCircle size={16} className="mr-2" />
-                          {certificate.validatedAffirmation.verification}
+                          {certificate?.validatedAffirmation?.verification || 'Vérification non disponible'}
                         </p>
                       </div>
                     </div>
 
                     <div>
-                      <h3 className="text-sm font-medium text-slate-500">Hash de preuve ZKP</h3>
-                      <p className="text-xs font-mono bg-slate-50 p-2 rounded border overflow-x-auto">
-                        {certificate.validatedAffirmation.zkProofHash}
+                      <h3 className="text-sm font-medium text-slate-500">Identifiant de preuve ZK</h3>
+                      <p className="text-slate-900 font-mono text-xs break-all bg-slate-100 p-2 rounded">
+                        {certificate?.validatedAffirmation?.zkProofHash || 'Preuve non disponible'}
                       </p>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Méthode de vérification</h3>
-                      <p className="text-slate-900">{certificate.verificationMethod}</p>
+                      <p className="text-slate-900">{certificate?.verificationMethod || 'Méthode non spécifiée'}</p>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Validité</h3>
                       <p className="text-slate-900">
-                        Valide jusqu'au {new Date(certificate.validUntil).toLocaleDateString('fr-FR')}
+                        Valide jusqu'au {certificate?.validUntil ? new Date(certificate.validUntil).toLocaleDateString('fr-FR') : 'date non spécifiée'}
                       </p>
                     </div>
                   </div>
@@ -289,24 +295,30 @@ export default function VerifyPage() {
                 </p>
 
                 <div className="bg-white border rounded-xl shadow-sm p-6 mb-8 text-left">
-                  <div className="mb-4">
-                    <h2 className="text-xl font-semibold mb-2">{certificate.title}</h2>
-                    <p className="text-sm text-slate-500">Généré le {certificate.date}</p>
+                  <div className="mb-8">
+                    <h2 className="text-xl font-semibold mb-2">{certificate?.title || 'Certificat de vérification'}</h2>
+                    <p className="text-sm text-slate-500">Généré le {certificate?.date || new Date().toLocaleDateString('fr-FR')}</p>
                   </div>
 
                   <div className="space-y-4">
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Document d'origine</h3>
-                      <p className="text-slate-900">{certificate.originalDocument.name}</p>
+                      <p className="text-slate-900">{certificate?.originalDocument?.name || 'Non disponible'}</p>
                     </div>
 
                     <div>
                       <h3 className="text-sm font-medium text-slate-500">Requête</h3>
-                      <p className="text-slate-900">{certificate.query}</p>
+                      <p className="text-slate-900">
+                        {typeof certificate?.query === 'object' && certificate?.query?.original
+                          ? certificate.query.original
+                          : (typeof certificate?.query === 'string'
+                              ? certificate.query
+                              : 'Non disponible')}
+                      </p>
                       <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-800">
                         <p className="text-sm flex items-center">
                           <XCircle size={16} className="mr-2" />
-                          {certificate.validatedAffirmation.verification}
+                          {certificate?.validatedAffirmation?.verification || 'Vérification non disponible'}
                         </p>
                       </div>
                     </div>
